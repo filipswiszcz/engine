@@ -35,14 +35,14 @@ public:
 };
 
 class linear_allocator {
-// public:
-//     [[nodiscard]] allocator_status initialize(void * const head, const size_t capacity);
-//     [[nodiscard]] allocation_result allocate(const size_t size, const size_t alignment = default_alignment);
-//     void reset(void);
-// private:
-//     u8 *head;
-//     size_t used;
-//     size_t capacity;
+public:
+    [[nodiscard]] allocator_status initialize(void * const head, const size_t capacity);
+    [[nodiscard]] allocation_result allocate(const size_t size, const size_t alignment = default_alignment);
+    void reset(void);
+private:
+    u8 *head;
+    size_t used;
+    size_t capacity;
 };
 
 class pool_allocator {
