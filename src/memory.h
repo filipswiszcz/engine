@@ -7,12 +7,6 @@ static constexpr size_t default_alignment = alignof(std::max_align_t);
 
 namespace core {
 
-// typedef struct MemoryArena {
-//     u8 *head;
-//     size_t used
-//     size_t capacity;
-// };
-
 enum class allocator_status : u8 {
     SUCCESS = 0,
     OUT_OF_MEMORY,
@@ -46,21 +40,21 @@ private:
 };
 
 class pool_allocator {
-// public:
-//     [[nodiscard]] allocator_status initialize(void * const head, const size_t capacity, const size_t chunk_size, const size_t alignment = default_alignment);
-//     [[nodiscard]] allocation_result allocate(void);
-//     [[nodiscard]] allocator_status free(void * const ptr);
-//     void reset(void);
-// private:
-//     struct node {
-//         node *next;
-//     };
+public:
+    [[nodiscard]] allocator_status initialize(void * const head, const size_t capacity, const size_t chunk_size, const size_t alignment = default_alignment);
+    [[nodiscard]] allocation_result allocate(void);
+    [[nodiscard]] allocator_status free(void * const ptr);
+    void reset(void);
+private:
+    struct node {
+        node *next;
+    };
 
-//     u8 *head;
-//     size_t used;
-//     size_t chunk_size;
-//     u32 chunk_counter;
-//     node *nodes;
+    u8 *head;
+    size_t used;
+    size_t chunk_size;
+    u32 chunk_counter;
+    node *nodes;
 };
 
 class double_buffered_allocator {};

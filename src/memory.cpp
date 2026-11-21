@@ -93,67 +93,95 @@ void linear_allocator::reset(void) {
 
 // POOL ALLOCATOR
 
-// allocator_status pool_allocator::initialize(void * const head, const size_t capacity, const size_t chunk_size, const size_t alignment = default_alignment) {
-//     if (!ENGINE_ASSERT(head != nullptr)) return allocator_status::INVALID_ARGUMENT;
-//     if (!ENGINE_ASSERT(capacity > 0)) return allocator_status::INVALID_CAPACITY;
-//     if (!ENGINE_ASSERT(chunk_size > 0)) return allocator_status::INVALID_SIZE;
-//     if (!ENGINE_ASSERT((alignment & (alignment - 1)) == 0)) return allocator_status::INVALID_ALIGNMENT;
+allocator_status pool_allocator::initialize(void * const head, const size_t capacity, const size_t chunk_size, const size_t alignment) {
+    if (!ENGINE_ASSERT(head != nullptr)) return allocator_status::INVALID_ARGUMENT;
+    if (!ENGINE_ASSERT(capacity > 0)) return allocator_status::INVALID_CAPACITY;
+    if (!ENGINE_ASSERT(chunk_size > 0)) return allocator_status::INVALID_SIZE;
+    if (!ENGINE_ASSERT(alignment > 0 && ((alignment & (alignment - 1)) == 0))) return allocator_status::INVALID_ALIGNMENT;
 
-//     size_t aligned_chunk_size = ((chunk_size > sizeof(node)) ? chunk_size : sizeof(node));
-//     aligned_chunk_size = ((aligned_chunk_size + (alignment - 1)) & (alignment - 1));
+    const size_t effective_alignment = (alignment > alignof(node)) ? alignment : alignof(node);
+    size_t aligned_chunk_size = ((chunk_size > sizeof(node)) ? chunk_size : sizeof(node));
+    aligned_chunk_size = ((aligned_chunk_size + (effective_alignment - 1)) & ~(effective_alignment - 1));
 
-//     const uintptr_t caddr = reinterpret_cast<uintptr_t>(head);
-//     const uintptr_t naddr = ((caddr + (alignment - 1)) & (alignment - 1));
+    const uintptr_t caddr = reinterpret_cast<uintptr_t>(head);
+    const uintptr_t naddr = ((caddr + (effective_alignment - 1)) & ~(effective_alignment - 1));
 
-//     const size_t padding = naddr - caddr;
-//     if (padding > capacity) {
-//         return allocator_status::INVALID_CAPACITY;
-//     }
+    const size_t padding = naddr - caddr;
+    if (padding >= capacity) {
+        return allocator_status::INVALID_CAPACITY;
+    }
 
-//     const size_t chunk_counter = (capacity - padding) / aligned_chunk_size;
-//     if (chunk_counter == 0) {
-//         return allocator_status::INVALID_CAPACITY;
-//     }
+    const size_t chunk_counter = (capacity - padding) / aligned_chunk_size;
+    if (chunk_counter == 0) {
+        return allocator_status::INVALID_CAPACITY;
+    }
 
-//     this->head = reinterpret_cast<u8*>(naddr);
-//     this->chunk_size = aligned_chunk_size;
-//     this->chunk_counter = chunks;
+    this->head = reinterpret_cast<u8*>(naddr);
+    this->chunk_size = aligned_chunk_size;
+    this->chunk_counter = chunk_counter;
 
-//     this->reset();
+    this->reset();
 
-//     return allocator_status::SUCCESS;
-// }
+    return allocator_status::SUCCESS;
+}
 
-// allocation_result pool_allocator::allocate(void) {
-//     if (!ENGINE_ASSERT(this->nodes != nullptr)) return {allocator_status::OUT_OF_MEMORY, nullptr};
+allocation_result pool_allocator::allocate(void) {
+    if (this->nodes == nullptr) {
+        return {allocator_status::OUT_OF_MEMORY, nullptr};
+    }
 
-//     node *node = this->nodes;
-//     this->nodes = this->nodes->next;
-//     this->used += 1;
+    struct node *node = this->nodes;
+    this->nodes = node->next;
+    this->used += 1;
 
-//     return {allocator_status::SUCCESS, reinterpret_cast<void*>(node)};
-// }
+    return {allocator_status::SUCCESS, reinterpret_cast<void*>(node)};
+}
 
-// allocator_status pool_allocator::free(void * const ptr) {
-//     if (!ENGINE_ASSERT(ptr != nullptr)) return allocator_status::INVALID_ARGUMENT;
+allocator_status pool_allocator::free(void * const ptr) {
+    if (!ENGINE_ASSERT(ptr != nullptr)) {
+        return allocator_status::INVALID_ARGUMENT;
+    }
+    if (!ENGINE_ASSERT(this->used > 0)) {
+        return allocator_status::INVALID_ARGUMENT;
+    }
 
-//     //..
+    const uintptr_t ptr_addr = reinterpret_cast<uintptr_t>(ptr);
+    const uintptr_t start_addr = reinterpret_cast<uintptr_t>(this->head);
+    const uintptr_t end_addr = start_addr + (this->chunk_counter * this->chunk_size);
 
-//     return allocator_status::SUCCESS;
-// }
+    if (!ENGINE_ASSERT(ptr_addr >= start_addr && ptr_addr < end_addr)) {
+        return allocator_status::INVALID_ARGUMENT;
+    }
+    if (!ENGINE_ASSERT(((ptr_addr - start_addr) % this->chunk_size) == 0)) {
+        return allocator_status::INVALID_ALIGNMENT;
+    }
 
-// void pool_allocator::reset(void) {
-//     this->used = 0;
-//     this->nodes = reinterpret_cast<node*>(this->head);
+    struct node *node = reinterpret_cast<struct node*>(ptr);
+    node->next = this->nodes;
+    this->nodes = node;
+    this->used -= 1;
 
-//     node *cnode = this->nodes;
-//     for (u32 i = 0; i < this->chunk_counter - 1; i++) {
-//         const uintptr_t naddr = reinterpret_cast<uintptr_t>(this->cnode) + this->chunk_size;
-//         cnode->next = reinterpret_cast<node*>(naddr);
-//         cnode = cnode->next;
-//     }
+    return allocator_status::SUCCESS;
+}
 
-//     cnode->next = nullptr;
-// }
+void pool_allocator::reset(void) {
+    this->used = 0;
+
+    if (this->chunk_counter == 0) {
+        this->nodes = nullptr;
+        return;
+    }
+
+    this->nodes = reinterpret_cast<struct node*>(this->head);
+
+    struct node *node = this->nodes;
+    for (u32 i = 0; i < this->chunk_counter - 1; i++) {
+        const uintptr_t next_addr = reinterpret_cast<uintptr_t>(node) + this->chunk_size;
+        node->next = reinterpret_cast<struct node*>(next_addr);
+        node = node->next;
+    }
+
+    node->next = nullptr; 
+}
 
 }
